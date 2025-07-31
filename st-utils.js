@@ -337,7 +337,11 @@ function getAvatarFileNameFromImgSrc(charType, imageSrc) {
             const charMatch = split.match(charThumbRegexp)?.at(1);
             return charMatch ? decodeURIComponent(charMatch) : split;
         case CharacterType.PERSONA:
-            return split; // TODO: Needs uri decode?
+            // TODO: Needs uri decode?
+            const userThumbRegexp = /\?type=persona&file=(.*)/i;
+            const userMatch = split.match(userThumbRegexp)?.at(1);
+            return userMatch ? decodeURIComponent(userMatch) : split;
+            // It turns out, this did in fact need a uri decode
         case CharacterType.SYSTEM:
             return imageSrc;
         default:
