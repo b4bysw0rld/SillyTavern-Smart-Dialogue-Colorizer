@@ -55,3 +55,49 @@
     margin: 4px;
     margin-top: 0;
 }
+
+.sdc-extension-settings .dc-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sdc-extension-settings .dc-slider {
+    flex: 1;
+    min-width: 150px;
+}
+
+.sdc-extension-settings .dc-slider-value {
+    min-width: 40px;
+    text-align: right;
+    font-family: monospace;
+}
+
+.sdc-extension-settings .dc-checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.sdc-extension-settings .dc-checkbox-container input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.sdc-extension-settings .dc-checkbox-container label {
+    margin: 0;
+}
+
+.sdc-extension-settings .dc-adjustments-group {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #444;
+}
+
+.sdc-extension-settings .dc-adjustments-group > label:first-child {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.95em;
+}

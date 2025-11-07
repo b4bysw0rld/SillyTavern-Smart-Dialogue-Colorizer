@@ -112,3 +112,96 @@ export function createColorSourceDropdown(id, onChangedCallback) {
 
     return createDropdownWithLabel(id, options, "Color Source", "The source to use for dialogue color.", onChangedCallback);
 }
+
+/**
+ * Creates a slider input with label and value display.
+ * 
+ * @param {string} id - The ID for the slider input
+ * @param {string} labelText - The label text
+ * @param {string} description - Tooltip description
+ * @param {number} min - Minimum value
+ * @param {number} max - Maximum value
+ * @param {number} step - Step increment
+ * @param {number} defaultValue - Default/initial value
+ * @param {(value: number) => void} onChangeCallback - Callback when value changes
+ * @returns {HTMLDivElement}
+ */
+export function createSliderWithLabel(id, labelText, description, min, max, step, defaultValue, onChangeCallback) {
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.innerHTML = labelText;
+    if (description) {
+        label.title = description;
+        label.innerHTML += `<span class="margin5 fa-solid fa-circle-info opacity50p"></span>`;
+    }
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.id = id;
+    slider.name = id;
+    slider.min = min.toString();
+    slider.max = max.toString();
+    slider.step = step.toString();
+    slider.value = defaultValue.toString();
+    slider.className = 'dc-slider';
+
+    const valueDisplay = document.createElement('span');
+    valueDisplay.className = 'dc-slider-value';
+    valueDisplay.textContent = defaultValue.toString();
+
+    const sliderContainer = document.createElement('div');
+    sliderContainer.className = 'dc-slider-container';
+    sliderContainer.appendChild(slider);
+    sliderContainer.appendChild(valueDisplay);
+
+    slider.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        valueDisplay.textContent = value.toString();
+        if (onChangeCallback) {
+            onChangeCallback(value);
+        }
+    });
+
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(label);
+    wrapper.appendChild(sliderContainer);
+    return wrapper;
+}
+
+/**
+ * Creates a checkbox input with label.
+ * 
+ * @param {string} id - The ID for the checkbox input
+ * @param {string} labelText - The label text
+ * @param {string} description - Tooltip description
+ * @param {boolean} defaultChecked - Default checked state
+ * @param {(checked: boolean) => void} onChangeCallback - Callback when checked state changes
+ * @returns {HTMLDivElement}
+ */
+export function createCheckboxWithLabel(id, labelText, description, defaultChecked, onChangeCallback) {
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = id;
+    checkbox.name = id;
+    checkbox.checked = defaultChecked;
+
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.innerHTML = labelText;
+    if (description) {
+        label.title = description;
+        label.innerHTML += `<span class="margin5 fa-solid fa-circle-info opacity50p"></span>`;
+    }
+
+    checkbox.addEventListener('change', (e) => {
+        if (onChangeCallback) {
+            onChangeCallback(e.target.checked);
+        }
+    });
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'dc-checkbox-container';
+    wrapper.appendChild(checkbox);
+    wrapper.appendChild(label);
+    return wrapper;
+}

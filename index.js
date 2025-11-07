@@ -10,7 +10,7 @@ import { extension_settings } from "../../../extensions.js";
 import { ExColor } from "./ExColor.js";
 import { CharacterType, STCharacter } from "./STCharacter.js";
 import { getSmartAvatarColor } from "./color-utils.js";
-import { createColorSourceDropdown, createColorTextPickerCombo } from "./element-creators.js";
+import { createColorSourceDropdown, createColorTextPickerCombo, createSliderWithLabel, createCheckboxWithLabel } from "./element-creators.js";
 import { initializeSettings } from "./settings-utils.js";
 import { 
     expEventSource, 
@@ -50,6 +50,10 @@ const defaultCharColorSettings = {
     colorizeSource: ColorizeSourceType.AVATAR_SMART,
     staticColor: DEFAULT_STATIC_DIALOGUE_COLOR_HEX,
     colorOverrides: {},
+    colorNameText: false,
+    hueAdjustment: 0,
+    saturationAdjustment: 0,
+    lightnessAdjustment: 0,
 };
 const defaultExtSettings = {
     charColorSettings: defaultCharColorSettings,
@@ -71,6 +75,7 @@ let personasStyleSheet;
 async function getCharStyleString(stChar) {
     let styleHtml = "";
     const dialogueColor = await getCharacterDialogueColor(stChar);
+    const colorSettings = getSettingsForChar(stChar);
 
     if (dialogueColor) {
         styleHtml += `
@@ -81,6 +86,15 @@ async function getCharStyleString(stChar) {
                 color: var(--character-color);
             }
         `;
+        
+        // Apply color to character name if enabled
+        if (colorSettings.colorNameText) {
+            styleHtml += `
+            .mes[sdc-author_uid="${stChar.uid}"] .name_text {
+                color: var(--character-color);
+            }
+        `;
+        }
     }
 
     return styleHtml;
@@ -143,11 +157,15 @@ function getSettingsForChar(charType) {
 /**
  * Improves color contrast for better readability on dark backgrounds.
  * Ensures adequate saturation and luminance while preserving hue.
+ * Applies global color adjustments.
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
+ * @param {number} hueAdjust - Hue adjustment in degrees (-180 to 180)
+ * @param {number} satAdjust - Saturation adjustment percentage (-100 to 100)
+ * @param {number} lumAdjust - Lightness adjustment percentage (-100 to 100)
  * @returns {import("./ExColor.js").ColorArray}
  */
-function makeBetterContrast(rgb) {
+function makeBetterContrast(rgb, hueAdjust = 0, satAdjust = 0, lumAdjust = 0) {
     const [h, s, l, a] = ExColor.rgb2hsl(rgb);
 
     let nHue = h;
@@ -168,6 +186,16 @@ function makeBetterContrast(rgb) {
         nLum = 0.8; // Tone down very bright colors
     }
 
+    // Apply global adjustments
+    // Hue: shift on color wheel (wraps around 0-360)
+    nHue = (nHue + hueAdjust + 360) % 360;
+    
+    // Saturation: adjust percentage (clamped 0-1)
+    nSat = Math.max(0, Math.min(1, nSat + (satAdjust / 100)));
+    
+    // Lightness: adjust percentage (clamped 0-1)
+    nLum = Math.max(0, Math.min(1, nLum + (lumAdjust / 100)));
+
     return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
 }
 
@@ -186,18 +214,28 @@ async function getCharacterDialogueColor(stChar) {
 
     switch (colorizeSource) {
         case ColorizeSourceType.AVATAR_SMART: {
+            // Create cache key that includes adjustment values
+            const cacheKey = `${stChar.uid}_${colorSettings.hueAdjustment}_${colorSettings.saturationAdjustment}_${colorSettings.lightnessAdjustment}`;
+            
             // Check cache first
-            if (avatarColorCache[stChar.uid]) {
-                return avatarColorCache[stChar.uid];
+            if (avatarColorCache[cacheKey]) {
+                return avatarColorCache[cacheKey];
             }
             
             const avatar = stChar.getAvatarImageThumbnail();
             const colorRgb = await getSmartAvatarColor(avatar);
-            const betterContrastRgb = colorRgb ? makeBetterContrast(colorRgb) : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
+            const betterContrastRgb = colorRgb 
+                ? makeBetterContrast(
+                    colorRgb, 
+                    colorSettings.hueAdjustment || 0,
+                    colorSettings.saturationAdjustment || 0,
+                    colorSettings.lightnessAdjustment || 0
+                  )
+                : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
             const exColor = ExColor.fromRgb(betterContrastRgb);
             
             // Cache the result
-            avatarColorCache[stChar.uid] = exColor;
+            avatarColorCache[cacheKey] = exColor;
             return exColor;
         }
         case ColorizeSourceType.STATIC_COLOR: {
@@ -302,12 +340,18 @@ function initializeStyleSheets() {
 function initializeSettingsUI() {
     const elemExtensionSettings = document.getElementById("sdc-extension-settings");
 
+    // ===== CHARACTER SETTINGS =====
     const charDialogueSettings = elemExtensionSettings.querySelector("#sdc-char_dialogue_settings");
+    
+    // Color source dropdown
     const charColorSourceDropdown = createColorSourceDropdown("sdc-char_colorize_source", (changedEvent) => {
         const value = $(changedEvent.target).prop("value");
         extSettings.charColorSettings.colorizeSource = value;
         onCharacterSettingsUpdated();
     });
+    charDialogueSettings.children[0].insertAdjacentElement("afterend", charColorSourceDropdown);
+    
+    // Static color picker
     const charStaticColorPickerCombo = createColorTextPickerCombo(
         (textboxValue) => getTextValidHexOrDefault(textboxValue, null), 
         (colorValue) => {
@@ -315,9 +359,67 @@ function initializeSettingsUI() {
             onCharacterSettingsUpdated();
         }
     );
-    charDialogueSettings.children[0].insertAdjacentElement("afterend", charColorSourceDropdown);
     charDialogueSettings.children[2].insertAdjacentElement("beforeend", charStaticColorPickerCombo);
 
+    // Color name text checkbox
+    const charColorNameCheckbox = createCheckboxWithLabel(
+        "sdc-char_color_name",
+        "Apply color to character names",
+        "When enabled, character names will be colored in addition to dialogue quotes.",
+        extSettings.charColorSettings.colorNameText || false,
+        (checked) => {
+            extSettings.charColorSettings.colorNameText = checked;
+            onCharacterSettingsUpdated();
+        }
+    );
+    charDialogueSettings.children[2].insertAdjacentElement("afterend", charColorNameCheckbox);
+
+    // Adjustment sliders
+    const charAdjustmentsGroup = charDialogueSettings.querySelector(".dc-adjustments-group");
+    
+    const charHueSlider = createSliderWithLabel(
+        "sdc-char_hue_adjustment",
+        "Hue Adjustment",
+        "Shift colors on the color wheel. Adjust hue by -30° to +30°.",
+        -30, 30, 1,
+        extSettings.charColorSettings.hueAdjustment || 0,
+        (value) => {
+            extSettings.charColorSettings.hueAdjustment = value;
+            avatarColorCache = {}; // Clear cache when adjustments change
+            onCharacterSettingsUpdated();
+        }
+    );
+    charAdjustmentsGroup.appendChild(charHueSlider);
+
+    const charSaturationSlider = createSliderWithLabel(
+        "sdc-char_saturation_adjustment",
+        "Saturation Adjustment",
+        "Boost or reduce color vibrancy. Adjust saturation by -50% to +50%.",
+        -50, 50, 1,
+        extSettings.charColorSettings.saturationAdjustment || 0,
+        (value) => {
+            extSettings.charColorSettings.saturationAdjustment = value;
+            avatarColorCache = {}; // Clear cache when adjustments change
+            onCharacterSettingsUpdated();
+        }
+    );
+    charAdjustmentsGroup.appendChild(charSaturationSlider);
+
+    const charLightnessSlider = createSliderWithLabel(
+        "sdc-char_lightness_adjustment",
+        "Brightness Adjustment",
+        "Make colors brighter or darker. Adjust brightness by -50% to +50%.",
+        -50, 50, 1,
+        extSettings.charColorSettings.lightnessAdjustment || 0,
+        (value) => {
+            extSettings.charColorSettings.lightnessAdjustment = value;
+            avatarColorCache = {}; // Clear cache when adjustments change
+            onCharacterSettingsUpdated();
+        }
+    );
+    charAdjustmentsGroup.appendChild(charLightnessSlider);
+
+    // Initialize values
     $(charColorSourceDropdown.querySelector('select'))
         .prop("value", extSettings.charColorSettings.colorizeSource)
         .trigger('change');
@@ -325,13 +427,18 @@ function initializeSettingsUI() {
         .prop("value", extSettings.charColorSettings.staticColor)
         .trigger('focusout');
 
+    // ===== PERSONA SETTINGS =====
     const personaDialogueSettings = elemExtensionSettings.querySelector("#sdc-persona_dialogue_settings");
+    
+    // Color source dropdown
     const personaColorSourceDropdown = createColorSourceDropdown("sdc-persona_colorize_source", (changedEvent) => {
         const value = $(changedEvent.target).prop("value");
         extSettings.personaColorSettings.colorizeSource = value;
         onPersonaSettingsUpdated();
     });
+    personaDialogueSettings.children[0].insertAdjacentElement("afterend", personaColorSourceDropdown);
     
+    // Static color picker
     const personaStaticColorPickerCombo = createColorTextPickerCombo(
         (textboxValue) => getTextValidHexOrDefault(textboxValue, null), 
         (colorValue) => {
@@ -339,9 +446,67 @@ function initializeSettingsUI() {
             onPersonaSettingsUpdated();
         }
     );
-    personaDialogueSettings.children[0].insertAdjacentElement("afterend", personaColorSourceDropdown);
     personaDialogueSettings.children[2].insertAdjacentElement("beforeend", personaStaticColorPickerCombo);
+
+    // Color name text checkbox
+    const personaColorNameCheckbox = createCheckboxWithLabel(
+        "sdc-persona_color_name",
+        "Apply color to persona names",
+        "When enabled, persona names will be colored in addition to dialogue quotes.",
+        extSettings.personaColorSettings.colorNameText || false,
+        (checked) => {
+            extSettings.personaColorSettings.colorNameText = checked;
+            onPersonaSettingsUpdated();
+        }
+    );
+    personaDialogueSettings.children[2].insertAdjacentElement("afterend", personaColorNameCheckbox);
+
+    // Adjustment sliders
+    const personaAdjustmentsGroup = personaDialogueSettings.querySelector(".dc-adjustments-group");
     
+    const personaHueSlider = createSliderWithLabel(
+        "sdc-persona_hue_adjustment",
+        "Hue Adjustment",
+        "Shift colors on the color wheel. Adjust hue by -30° to +30°.",
+        -30, 30, 1,
+        extSettings.personaColorSettings.hueAdjustment || 0,
+        (value) => {
+            extSettings.personaColorSettings.hueAdjustment = value;
+            avatarColorCache = {}; // Clear cache when adjustments change
+            onPersonaSettingsUpdated();
+        }
+    );
+    personaAdjustmentsGroup.appendChild(personaHueSlider);
+
+    const personaSaturationSlider = createSliderWithLabel(
+        "sdc-persona_saturation_adjustment",
+        "Saturation Adjustment",
+        "Boost or reduce color vibrancy. Adjust saturation by -50% to +50%.",
+        -50, 50, 1,
+        extSettings.personaColorSettings.saturationAdjustment || 0,
+        (value) => {
+            extSettings.personaColorSettings.saturationAdjustment = value;
+            avatarColorCache = {}; // Clear cache when adjustments change
+            onPersonaSettingsUpdated();
+        }
+    );
+    personaAdjustmentsGroup.appendChild(personaSaturationSlider);
+
+    const personaLightnessSlider = createSliderWithLabel(
+        "sdc-persona_lightness_adjustment",
+        "Brightness Adjustment",
+        "Make colors brighter or darker. Adjust brightness by -50% to +50%.",
+        -50, 50, 1,
+        extSettings.personaColorSettings.lightnessAdjustment || 0,
+        (value) => {
+            extSettings.personaColorSettings.lightnessAdjustment = value;
+            avatarColorCache = {}; // Clear cache when adjustments change
+            onPersonaSettingsUpdated();
+        }
+    );
+    personaAdjustmentsGroup.appendChild(personaLightnessSlider);
+
+    // Initialize values
     $(personaColorSourceDropdown.querySelector('select'))
         .prop("value", extSettings.personaColorSettings.colorizeSource)
         .trigger('change');

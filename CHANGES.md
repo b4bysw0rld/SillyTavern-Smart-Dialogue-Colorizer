@@ -1,5 +1,21 @@
 # Smart Dialogue Colorizer - Changes Summary
 
+## 🆕 Version 1.1.0 - New Features (November 2025)
+
+### Global Color Adjustments
+- **Hue Adjustment Slider**: Shift colors on the color wheel by -30° to +30°
+- **Saturation Adjustment Slider**: Boost or reduce color vibrancy by -50% to +50%
+- **Brightness Adjustment Slider**: Make colors brighter or darker by -50% to +50%
+- These adjustments apply globally to all colors extracted from avatars in "Avatar Smart" mode
+- Separate adjustment controls for both Character and Persona settings
+- Cache invalidation ensures adjustments take effect immediately
+
+### Character Name Coloring
+- **New Option**: Apply color to character names in addition to dialogue quotes
+- Separate toggle checkbox for Character and Persona settings
+- Uses the same color source and adjustments as dialogue coloring
+- Colors the `.name_text` element in SillyTavern messages
+
 ## 🎯 What Was Built
 
 This is an improved version of the Dialogue Colorizer Plus extension with enhanced reliability, better color extraction, and a simplified user interface.
