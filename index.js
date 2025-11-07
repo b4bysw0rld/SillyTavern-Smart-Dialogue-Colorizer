@@ -51,7 +51,6 @@ const defaultCharColorSettings = {
     staticColor: DEFAULT_STATIC_DIALOGUE_COLOR_HEX,
     colorOverrides: {},
     colorNameText: false,
-    hueAdjustment: 0,
     saturationAdjustment: 0,
     lightnessAdjustment: 0,
 };
@@ -160,12 +159,11 @@ function getSettingsForChar(charType) {
  * Applies global color adjustments.
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
- * @param {number} hueAdjust - Hue adjustment in degrees (-180 to 180)
- * @param {number} satAdjust - Saturation adjustment percentage (-100 to 100)
- * @param {number} lumAdjust - Lightness adjustment percentage (-100 to 100)
+ * @param {number} satAdjust - Saturation adjustment (0 to 10)
+ * @param {number} lumAdjust - Brightness adjustment (0 to 10)
  * @returns {import("./ExColor.js").ColorArray}
  */
-function makeBetterContrast(rgb, hueAdjust = 0, satAdjust = 0, lumAdjust = 0) {
+function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
     const [h, s, l, a] = ExColor.rgb2hsl(rgb);
 
     let nHue = h;
@@ -186,14 +184,11 @@ function makeBetterContrast(rgb, hueAdjust = 0, satAdjust = 0, lumAdjust = 0) {
         nLum = 0.8; // Tone down very bright colors
     }
 
-    // Apply global adjustments
-    // Hue: shift on color wheel (wraps around 0-360)
-    nHue = (nHue + hueAdjust + 360) % 360;
-    
-    // Saturation: adjust percentage (clamped 0-1)
+    // Apply global adjustments (0-10 scale converted to percentage)
+    // Saturation: increase only (clamped 0-1)
     nSat = Math.max(0, Math.min(1, nSat + (satAdjust / 100)));
     
-    // Lightness: adjust percentage (clamped 0-1)
+    // Brightness: increase only (clamped 0-1)
     nLum = Math.max(0, Math.min(1, nLum + (lumAdjust / 100)));
 
     return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
@@ -215,7 +210,7 @@ async function getCharacterDialogueColor(stChar) {
     switch (colorizeSource) {
         case ColorizeSourceType.AVATAR_SMART: {
             // Create cache key that includes adjustment values
-            const cacheKey = `${stChar.uid}_${colorSettings.hueAdjustment}_${colorSettings.saturationAdjustment}_${colorSettings.lightnessAdjustment}`;
+            const cacheKey = `${stChar.uid}_${colorSettings.saturationAdjustment}_${colorSettings.lightnessAdjustment}`;
             
             // Check cache first
             if (avatarColorCache[cacheKey]) {
@@ -227,7 +222,6 @@ async function getCharacterDialogueColor(stChar) {
             const betterContrastRgb = colorRgb 
                 ? makeBetterContrast(
                     colorRgb, 
-                    colorSettings.hueAdjustment || 0,
                     colorSettings.saturationAdjustment || 0,
                     colorSettings.lightnessAdjustment || 0
                   )
@@ -376,26 +370,12 @@ function initializeSettingsUI() {
 
     // Adjustment sliders
     const charAdjustmentsGroup = charDialogueSettings.querySelector(".dc-adjustments-group");
-    
-    const charHueSlider = createSliderWithLabel(
-        "sdc-char_hue_adjustment",
-        "Hue Adjustment",
-        "Shift colors on the color wheel. Adjust hue by -30° to +30°.",
-        -30, 30, 1,
-        extSettings.charColorSettings.hueAdjustment || 0,
-        (value) => {
-            extSettings.charColorSettings.hueAdjustment = value;
-            avatarColorCache = {}; // Clear cache when adjustments change
-            onCharacterSettingsUpdated();
-        }
-    );
-    charAdjustmentsGroup.appendChild(charHueSlider);
 
     const charSaturationSlider = createSliderWithLabel(
         "sdc-char_saturation_adjustment",
-        "Saturation Adjustment",
-        "Boost or reduce color vibrancy. Adjust saturation by -50% to +50%.",
-        -50, 50, 1,
+        "Saturation Boost",
+        "Increase color vibrancy. Range: 0-10",
+        0, 10, 1,
         extSettings.charColorSettings.saturationAdjustment || 0,
         (value) => {
             extSettings.charColorSettings.saturationAdjustment = value;
@@ -407,9 +387,9 @@ function initializeSettingsUI() {
 
     const charLightnessSlider = createSliderWithLabel(
         "sdc-char_lightness_adjustment",
-        "Brightness Adjustment",
-        "Make colors brighter or darker. Adjust brightness by -50% to +50%.",
-        -50, 50, 1,
+        "Brightness Boost",
+        "Make colors brighter. Range: 0-10",
+        0, 10, 1,
         extSettings.charColorSettings.lightnessAdjustment || 0,
         (value) => {
             extSettings.charColorSettings.lightnessAdjustment = value;
@@ -463,26 +443,12 @@ function initializeSettingsUI() {
 
     // Adjustment sliders
     const personaAdjustmentsGroup = personaDialogueSettings.querySelector(".dc-adjustments-group");
-    
-    const personaHueSlider = createSliderWithLabel(
-        "sdc-persona_hue_adjustment",
-        "Hue Adjustment",
-        "Shift colors on the color wheel. Adjust hue by -30° to +30°.",
-        -30, 30, 1,
-        extSettings.personaColorSettings.hueAdjustment || 0,
-        (value) => {
-            extSettings.personaColorSettings.hueAdjustment = value;
-            avatarColorCache = {}; // Clear cache when adjustments change
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaAdjustmentsGroup.appendChild(personaHueSlider);
 
     const personaSaturationSlider = createSliderWithLabel(
         "sdc-persona_saturation_adjustment",
-        "Saturation Adjustment",
-        "Boost or reduce color vibrancy. Adjust saturation by -50% to +50%.",
-        -50, 50, 1,
+        "Saturation Boost",
+        "Increase color vibrancy. Range: 0-10",
+        0, 10, 1,
         extSettings.personaColorSettings.saturationAdjustment || 0,
         (value) => {
             extSettings.personaColorSettings.saturationAdjustment = value;
@@ -494,9 +460,9 @@ function initializeSettingsUI() {
 
     const personaLightnessSlider = createSliderWithLabel(
         "sdc-persona_lightness_adjustment",
-        "Brightness Adjustment",
-        "Make colors brighter or darker. Adjust brightness by -50% to +50%.",
-        -50, 50, 1,
+        "Brightness Boost",
+        "Make colors brighter. Range: 0-10",
+        0, 10, 1,
         extSettings.personaColorSettings.lightnessAdjustment || 0,
         (value) => {
             extSettings.personaColorSettings.lightnessAdjustment = value;

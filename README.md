@@ -22,9 +22,8 @@ An improved SillyTavern extension that automatically colors dialogue quotes base
   - Disabled - Turn off auto-coloring
 - **Per-Character Overrides**: Set specific colors for individual characters in their character editor
 - **Global Color Adjustments**: Fine-tune all avatar-extracted colors with:
-  - Hue adjustment (-30° to +30°) - Shift colors on the color wheel
-  - Saturation adjustment (-50% to +50%) - Boost or reduce vibrancy
-  - Brightness adjustment (-50% to +50%) - Make colors brighter or darker
+  - Saturation boost (0-10) - Increase color vibrancy
+  - Brightness boost (0-10) - Make colors brighter
 - **Character Name Coloring**: Optionally apply colors to character names in addition to dialogue quotes
 
 ### CSS Variable Support

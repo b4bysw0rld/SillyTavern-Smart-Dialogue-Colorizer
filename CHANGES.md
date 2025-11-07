@@ -3,12 +3,12 @@
 ## 🆕 Version 1.1.0 - New Features (November 2025)
 
 ### Global Color Adjustments
-- **Hue Adjustment Slider**: Shift colors on the color wheel by -30° to +30°
-- **Saturation Adjustment Slider**: Boost or reduce color vibrancy by -50% to +50%
-- **Brightness Adjustment Slider**: Make colors brighter or darker by -50% to +50%
+- **Saturation Boost Slider**: Increase color vibrancy with a 0-10 range
+- **Brightness Boost Slider**: Make colors brighter with a 0-10 range
 - These adjustments apply globally to all colors extracted from avatars in "Avatar Smart" mode
 - Separate adjustment controls for both Character and Persona settings
 - Cache invalidation ensures adjustments take effect immediately
+- Incremental increases only (no negative values) to prevent grey/washed out colors
 
 ### Character Name Coloring
 - **New Option**: Apply color to character names in addition to dialogue quotes
