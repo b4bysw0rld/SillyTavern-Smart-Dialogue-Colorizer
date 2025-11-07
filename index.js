@@ -184,9 +184,9 @@ function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
         nLum = 0.8; // Tone down very bright colors
     }
 
-    // Apply global adjustments (0-10 scale converted to percentage)
-    // Saturation: increase only (clamped 0-1)
-    nSat = Math.max(0, Math.min(1, nSat + (satAdjust / 100)));
+    // Apply global adjustments (0-10 scale)
+    // Saturation: increase only (clamped 0-1), multiplied by 4 for stronger effect (0-40% range)
+    nSat = Math.max(0, Math.min(1, nSat + ((satAdjust * 4) / 100)));
     
     // Brightness: increase only (clamped 0-1)
     nLum = Math.max(0, Math.min(1, nLum + (lumAdjust / 100)));
