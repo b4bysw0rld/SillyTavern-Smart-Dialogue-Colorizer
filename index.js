@@ -65,6 +65,89 @@ const extName = "SillyTavern-Smart-Dialogue-Colorizer";
 const extFolderPath = `scripts/extensions/third-party/${extName}`;
 const extSettings = initializeSettings(extName, defaultExtSettings);
 
+/** @type {HTMLElement?} */
+let popoutElement = null;
+
+function createSettingsPopout(settingsHtml) {
+    if (popoutElement) {
+        return;
+    }
+
+    popoutElement = document.createElement('div');
+    popoutElement.id = 'sdc-settings-popout';
+    popoutElement.innerHTML = `
+        <div class="sdc-popout-panel">
+            <div class="sdc-popout-header">
+                <h3>Smart Dialogue Colorizer</h3>
+                <button type="button" class="sdc-popout-close" aria-label="Close">
+                    <span class="fa-solid fa-xmark"></span>
+                </button>
+            </div>
+            <div class="sdc-popout-body"></div>
+        </div>
+    `;
+
+    document.body.appendChild(popoutElement);
+
+    const popoutBody = popoutElement.querySelector('.sdc-popout-body');
+    popoutBody.innerHTML = settingsHtml;
+
+    const closeButton = popoutElement.querySelector('.sdc-popout-close');
+    closeButton.addEventListener('click', () => toggleSettingsPopout(false));
+
+    popoutElement.addEventListener('click', (event) => {
+        if (event.target === popoutElement) {
+            toggleSettingsPopout(false);
+        }
+    });
+}
+
+function toggleSettingsPopout(open = true) {
+    if (!popoutElement) {
+        console.warn('[SDC] Settings popout not initialized yet.');
+        return;
+    }
+
+    if (open) {
+        popoutElement.classList.add('sdc-popout-open');
+        const firstInput = popoutElement.querySelector('input, select, button, textarea');
+        if (firstInput) {
+            firstInput.focus({ preventScroll: true });
+        }
+    } else {
+        popoutElement.classList.remove('sdc-popout-open');
+    }
+}
+
+function insertSettingsPanelStub(container) {
+    if (!container) {
+        return;
+    }
+
+    if (container.querySelector('#sdc-settings-stub')) {
+        return;
+    }
+
+    const stub = document.createElement('div');
+    stub.id = 'sdc-settings-stub';
+    stub.className = 'sdc-extension_block dc-flex-container';
+    stub.innerHTML = `
+        <p>
+            Smart Dialogue Colorizer now uses a dedicated pop-out for its settings.
+            You can open it from the Extensions dropdown menu, or by clicking the button below.
+        </p>
+        <button class="menu_button menu_button_small sdc-open-settings-button" type="button">
+            <span class="fa-solid fa-palette"></span>
+            <span>Open Settings</span>
+        </button>
+    `;
+
+    const openButton = stub.querySelector('button');
+    openButton.addEventListener('click', () => toggleSettingsPopout(true));
+
+    container.appendChild(stub);
+}
+
 function debounce(fn, delay = 100) {
     /** @type {number?} */
     let timeoutId = null;
@@ -646,80 +729,26 @@ function initializeSettingsUI() {
  * that opens the Extensions panel and scrolls to the extension's settings.
  */
 function addExtensionMenuButton() {
-    // Select the Extensions dropdown menu
     const $extensionsMenu = $('#extensionsMenu');
     if (!$extensionsMenu.length) {
-        console.warn('[SDC] Extensions menu not found');
         return;
     }
 
-    // Check if button already exists to prevent duplicates
     if ($extensionsMenu.find('#sdc-extensions-menu-button').length) {
         return;
     }
 
-    // Create button element with palette icon and extension name
     const $button = $(`
         <div id="sdc-extensions-menu-button" class="list-group-item flex-container flexGap5 interactable" title="Open Smart Dialogue Colorizer Settings" tabindex="0">
             <i class="fa-solid fa-palette"></i>
-            <span>Dialogue Colorizer</span>
+            <span>Smart Dialogue Colorizer</span>
         </div>
     `);
 
-    // Append to extensions menu
     $button.appendTo($extensionsMenu);
 
-    // Set click handler to open Extensions panel and scroll to settings
     $button.on('click', () => {
-        // First, ensure the Extensions panel is open
-        const $extensionsButton = $('#extensionsButton');
-        const $extensionsDrawer = $('#extensions_settings');
-        
-        // Open Extensions panel if not already open
-        if ($extensionsDrawer.length && !$extensionsDrawer.hasClass('openDrawer')) {
-            $extensionsButton.trigger('click');
-        }
-
-        // Small delay to ensure panel is open before scrolling
-        setTimeout(() => {
-            const $settingsDrawer = $('#sdc-extension-settings');
-            if (!$settingsDrawer.length) {
-                console.warn('[SDC] Settings drawer not found');
-                return;
-            }
-
-            // Scroll to the settings within the Extensions panel
-            const extensionsPanel = document.getElementById('extensions_settings2');
-            if (extensionsPanel) {
-                const settingsElement = $settingsDrawer[0];
-                const offsetTop = settingsElement.offsetTop - 20; // 20px padding
-                extensionsPanel.scrollTo({
-                    top: offsetTop,
-                    behavior: 'smooth'
-                });
-            }
-
-            // Open the drawer if it's not already open
-            const $drawerToggle = $settingsDrawer.find('.inline-drawer-toggle');
-            const $drawerContent = $settingsDrawer.find('.inline-drawer-content');
-            const $drawerIcon = $settingsDrawer.find('.inline-drawer-icon');
-
-            if ($drawerToggle.length && $drawerContent.length && !$drawerContent.hasClass('open')) {
-                $drawerToggle.addClass('open');
-                $drawerContent.addClass('open');
-                if ($drawerIcon.length) {
-                    $drawerIcon.removeClass('down').addClass('up');
-                }
-            }
-
-            // Brief highlight effect to draw attention
-            $settingsDrawer.css('transition', 'background-color 0.3s ease');
-            const originalBg = $settingsDrawer.css('background-color');
-            $settingsDrawer.css('background-color', 'rgba(100, 150, 200, 0.2)');
-            setTimeout(() => {
-                $settingsDrawer.css('background-color', originalBg);
-            }, 600);
-        }, 100);
+        toggleSettingsPopout(true);
     });
 }
 
@@ -853,18 +882,18 @@ function initializeCharSpecificUI() {
 jQuery(async ($) => {
     const settingsHtml = await $.get(`${extFolderPath}/dialogue-colorizer.html`);
 
+    createSettingsPopout(settingsHtml);
+
     const elemStExtensionSettings2 = document.getElementById("extensions_settings2");
-    $(elemStExtensionSettings2).append(settingsHtml);
+    insertSettingsPanelStub(elemStExtensionSettings2);
 
     initializeStyleSheets();
     initializeSettingsUI();
     initializeCharSpecificUI();
 
-    // Wire up extension menu button so it is created when the Extensions menu is opened
     const extensionsButton = document.getElementById("extensionsButton");
     if (extensionsButton) {
         extensionsButton.addEventListener("click", () => {
-            // Run after the menu has been rendered
             setTimeout(() => addExtensionMenuButton(), 0);
         });
     }
