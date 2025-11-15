@@ -51,6 +51,8 @@ const defaultCharColorSettings = {
     staticColor: DEFAULT_STATIC_DIALOGUE_COLOR_HEX,
     colorOverrides: {},
     colorNameText: false,
+    colorItalicText: false,
+    italicGreyMix: 70,
     saturationAdjustment: 0,
     lightnessAdjustment: 0,
 };
@@ -105,6 +107,17 @@ async function getCharStyleString(stChar) {
             styleHtml += `
             .mes[sdc-author_uid="${stChar.uid}"] .name_text {
                 color: var(--character-color);
+            }
+        `;
+        }
+
+        // Apply color to italic text (markdown asterisks) if enabled
+        if (colorSettings.colorItalicText) {
+            const charColorPercent = 100 - (colorSettings.italicGreyMix || 70);
+            const greyPercent = colorSettings.italicGreyMix || 70;
+            styleHtml += `
+            .mes[sdc-author_uid="${stChar.uid}"] .mes_text em:not(font em) {
+                color: color-mix(in srgb, var(--character-color) ${charColorPercent}%, grey ${greyPercent}%) !important;
             }
         `;
         }
@@ -174,10 +187,10 @@ function getSettingsForChar(charType) {
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
  * @param {number} satAdjust - Saturation adjustment (0 to 10)
- * @param {number} lumAdjust - Brightness adjustment (0 to 10)
+ * @param {number} brightAdjust - Brightness adjustment (0 to 10) - scales RGB values
  * @returns {import("./ExColor.js").ColorArray}
  */
-function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
+function makeBetterContrast(rgb, satAdjust = 0, brightAdjust = 0) {
     const [h, s, l, a] = ExColor.rgb2hsl(rgb);
 
     let nHue = h;
@@ -198,14 +211,27 @@ function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
         nLum = 0.8; // Tone down very bright colors
     }
 
-    // Apply global adjustments (0-10 scale)
+    // Apply saturation adjustment (0-10 scale)
     // Saturation: increase only (clamped 0-1), multiplied by 4 for stronger effect (0-40% range)
     nSat = Math.max(0, Math.min(1, nSat + ((satAdjust * 4) / 100)));
-    
-    // Brightness: increase only (clamped 0-1)
-    nLum = Math.max(0, Math.min(1, nLum + (lumAdjust / 100)));
 
-    return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
+    // Convert back to RGB with saturation adjustment
+    let adjustedRgb = ExColor.hsl2rgb([nHue, nSat, nLum, a]);
+    
+    // Apply brightness by scaling RGB values (multiplicative brightening)
+    // This maintains color vibrancy unlike increasing HSL lightness which washes out colors
+    if (brightAdjust > 0) {
+        // Scale factor: 1.0 to 2.0 (0 = no change, 10 = 2x brighter)
+        const brightScale = 1 + (brightAdjust / 10);
+        adjustedRgb = [
+            Math.min(255, adjustedRgb[0] * brightScale),
+            Math.min(255, adjustedRgb[1] * brightScale),
+            Math.min(255, adjustedRgb[2] * brightScale),
+            adjustedRgb[3] // preserve alpha
+        ];
+    }
+
+    return adjustedRgb;
 }
 
 const MAX_CACHE_SIZE = 100; // Prevent memory issues with many characters
@@ -479,6 +505,37 @@ function initializeSettingsUI() {
     );
     charDialogueSettings.children[2].insertAdjacentElement("afterend", charColorNameCheckbox);
 
+    // Color italic text checkbox
+    const charColorItalicCheckbox = createCheckboxWithLabel(
+        "sdc-char_color_italic",
+        "Color italic text (markdown *asterisks*)",
+        "When enabled, italic text will be colored with a mix of character color and grey.",
+        extSettings.charColorSettings.colorItalicText || false,
+        (checked) => {
+            extSettings.charColorSettings.colorItalicText = checked;
+            // Show/hide the grey mix slider based on checkbox state
+            charItalicGreySlider.style.display = checked ? 'block' : 'none';
+            onCharacterSettingsUpdated();
+        }
+    );
+    charDialogueSettings.children[2].insertAdjacentElement("afterend", charColorItalicCheckbox);
+
+    // Italic grey mix slider (nested under checkbox)
+    const charItalicGreySlider = createSliderWithLabel(
+        "sdc-char_italic_grey_mix",
+        "Italic Grey Mix %",
+        "Percentage of grey in italic text color mix. Higher = more grey, less character color. Range: 0-100",
+        0, 100, 5,
+        extSettings.charColorSettings.italicGreyMix || 70,
+        (value) => {
+            extSettings.charColorSettings.italicGreyMix = value;
+            onCharacterSettingsUpdated();
+        }
+    );
+    charItalicGreySlider.style.marginLeft = "24px"; // Indent to show it's related to checkbox
+    charItalicGreySlider.style.display = (extSettings.charColorSettings.colorItalicText || false) ? 'block' : 'none';
+    charDialogueSettings.children[2].insertAdjacentElement("afterend", charItalicGreySlider);
+
     // Adjustment sliders
     const charAdjustmentsGroup = charDialogueSettings.querySelector(".dc-adjustments-group");
 
@@ -499,7 +556,7 @@ function initializeSettingsUI() {
     const charLightnessSlider = createSliderWithLabel(
         "sdc-char_lightness_adjustment",
         "Brightness Boost",
-        "Make colors brighter. Range: 0-10",
+        "Brighten colors while maintaining vibrancy (multiplies RGB values). Range: 0-10",
         0, 10, 1,
         extSettings.charColorSettings.lightnessAdjustment || 0,
         (value) => {
@@ -552,6 +609,37 @@ function initializeSettingsUI() {
     );
     personaDialogueSettings.children[2].insertAdjacentElement("afterend", personaColorNameCheckbox);
 
+    // Color italic text checkbox
+    const personaColorItalicCheckbox = createCheckboxWithLabel(
+        "sdc-persona_color_italic",
+        "Color italic text (markdown *asterisks*)",
+        "When enabled, italic text will be colored with a mix of persona color and grey.",
+        extSettings.personaColorSettings.colorItalicText || false,
+        (checked) => {
+            extSettings.personaColorSettings.colorItalicText = checked;
+            // Show/hide the grey mix slider based on checkbox state
+            personaItalicGreySlider.style.display = checked ? 'block' : 'none';
+            onPersonaSettingsUpdated();
+        }
+    );
+    personaDialogueSettings.children[2].insertAdjacentElement("afterend", personaColorItalicCheckbox);
+
+    // Italic grey mix slider (nested under checkbox)
+    const personaItalicGreySlider = createSliderWithLabel(
+        "sdc-persona_italic_grey_mix",
+        "Italic Grey Mix %",
+        "Percentage of grey in italic text color mix. Higher = more grey, less persona color. Range: 0-100",
+        0, 100, 5,
+        extSettings.personaColorSettings.italicGreyMix || 70,
+        (value) => {
+            extSettings.personaColorSettings.italicGreyMix = value;
+            onPersonaSettingsUpdated();
+        }
+    );
+    personaItalicGreySlider.style.marginLeft = "24px"; // Indent to show it's related to checkbox
+    personaItalicGreySlider.style.display = (extSettings.personaColorSettings.colorItalicText || false) ? 'block' : 'none';
+    personaDialogueSettings.children[2].insertAdjacentElement("afterend", personaItalicGreySlider);
+
     // Adjustment sliders
     const personaAdjustmentsGroup = personaDialogueSettings.querySelector(".dc-adjustments-group");
 
@@ -572,7 +660,7 @@ function initializeSettingsUI() {
     const personaLightnessSlider = createSliderWithLabel(
         "sdc-persona_lightness_adjustment",
         "Brightness Boost",
-        "Make colors brighter. Range: 0-10",
+        "Brighten colors while maintaining vibrancy (multiplies RGB values). Range: 0-10",
         0, 10, 1,
         extSettings.personaColorSettings.lightnessAdjustment || 0,
         (value) => {
@@ -595,68 +683,83 @@ function initializeSettingsUI() {
 /**
  * Adds a button to the Extensions dropdown menu for Smart Dialogue Colorizer
  * This function creates a menu item in SillyTavern's Extensions dropdown
- * that scrolls to and opens the extension's settings panel.
+ * that opens the Extensions panel and scrolls to the extension's settings.
  */
 function addExtensionMenuButton() {
     // Select the Extensions dropdown menu
-    const extensionsMenu = document.getElementById('extensionsMenu');
-    if (!extensionsMenu) {
+    const $extensionsMenu = $('#extensionsMenu');
+    if (!$extensionsMenu.length) {
         console.warn('[SDC] Extensions menu not found');
         return;
     }
 
     // Check if button already exists to prevent duplicates
-    if (document.getElementById('sdc-extensions-menu-button')) {
+    if ($extensionsMenu.find('#sdc-extensions-menu-button').length) {
         return;
     }
 
     // Create button element with palette icon and extension name
-    const button = document.createElement('div');
-    button.id = 'sdc-extensions-menu-button';
-    button.className = 'list-group-item flex-container flexGap5 interactable';
-    button.title = 'Open Smart Dialogue Colorizer Settings';
-    button.setAttribute('tabindex', '0');
-    button.innerHTML = `
-        <i class="fa-solid fa-palette"></i>
-        <span>Dialogue Colorizer</span>
-    `;
+    const $button = $(`
+        <div id="sdc-extensions-menu-button" class="list-group-item flex-container flexGap5 interactable" title="Open Smart Dialogue Colorizer Settings" tabindex="0">
+            <i class="fa-solid fa-palette"></i>
+            <span>Dialogue Colorizer</span>
+        </div>
+    `);
 
     // Append to extensions menu
-    extensionsMenu.appendChild(button);
+    $button.appendTo($extensionsMenu);
 
-    // Set click handler to scroll to and open the settings
-    button.addEventListener('click', () => {
-        // Find the settings drawer
-        const settingsDrawer = document.getElementById('sdc-extension-settings');
-        if (!settingsDrawer) {
-            console.warn('[SDC] Settings drawer not found');
-            return;
+    // Set click handler to open Extensions panel and scroll to settings
+    $button.on('click', () => {
+        // First, ensure the Extensions panel is open
+        const $extensionsButton = $('#extensionsButton');
+        const $extensionsDrawer = $('#extensions_settings');
+        
+        // Open Extensions panel if not already open
+        if ($extensionsDrawer.length && !$extensionsDrawer.hasClass('openDrawer')) {
+            $extensionsButton.trigger('click');
         }
 
-        // Scroll to the settings
-        settingsDrawer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        // Open the drawer if it's not already open
-        const drawerToggle = settingsDrawer.querySelector('.inline-drawer-toggle');
-        const drawerContent = settingsDrawer.querySelector('.inline-drawer-content');
-        const drawerIcon = settingsDrawer.querySelector('.inline-drawer-icon');
-
-        if (drawerToggle && drawerContent && !drawerContent.classList.contains('open')) {
-            drawerToggle.classList.add('open');
-            drawerContent.classList.add('open');
-            if (drawerIcon) {
-                drawerIcon.classList.remove('down');
-                drawerIcon.classList.add('up');
-            }
-        }
-
-        // Brief highlight effect to draw attention
-        settingsDrawer.style.transition = 'background-color 0.3s ease';
-        const originalBg = settingsDrawer.style.backgroundColor;
-        settingsDrawer.style.backgroundColor = 'rgba(var(--SmartThemeBodyColor), 0.3)';
+        // Small delay to ensure panel is open before scrolling
         setTimeout(() => {
-            settingsDrawer.style.backgroundColor = originalBg;
-        }, 600);
+            const $settingsDrawer = $('#sdc-extension-settings');
+            if (!$settingsDrawer.length) {
+                console.warn('[SDC] Settings drawer not found');
+                return;
+            }
+
+            // Scroll to the settings within the Extensions panel
+            const extensionsPanel = document.getElementById('extensions_settings2');
+            if (extensionsPanel) {
+                const settingsElement = $settingsDrawer[0];
+                const offsetTop = settingsElement.offsetTop - 20; // 20px padding
+                extensionsPanel.scrollTo({
+                    top: offsetTop,
+                    behavior: 'smooth'
+                });
+            }
+
+            // Open the drawer if it's not already open
+            const $drawerToggle = $settingsDrawer.find('.inline-drawer-toggle');
+            const $drawerContent = $settingsDrawer.find('.inline-drawer-content');
+            const $drawerIcon = $settingsDrawer.find('.inline-drawer-icon');
+
+            if ($drawerToggle.length && $drawerContent.length && !$drawerContent.hasClass('open')) {
+                $drawerToggle.addClass('open');
+                $drawerContent.addClass('open');
+                if ($drawerIcon.length) {
+                    $drawerIcon.removeClass('down').addClass('up');
+                }
+            }
+
+            // Brief highlight effect to draw attention
+            $settingsDrawer.css('transition', 'background-color 0.3s ease');
+            const originalBg = $settingsDrawer.css('background-color');
+            $settingsDrawer.css('background-color', 'rgba(100, 150, 200, 0.2)');
+            setTimeout(() => {
+                $settingsDrawer.css('background-color', originalBg);
+            }, 600);
+        }, 100);
     });
 }
 
