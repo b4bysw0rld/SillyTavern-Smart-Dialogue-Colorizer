@@ -183,11 +183,14 @@ function getSettingsForChar(charType) {
 /**
  * Improves color contrast for better readability on dark backgrounds.
  * Ensures adequate saturation and luminance while preserving hue.
- * Applies global color adjustments.
+ * Applies global saturation adjustment.
+ * 
+ * NOTE: Brightness slider has been removed; the brightAdjust parameter is kept
+ * for backward compatibility but is ignored.
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
  * @param {number} satAdjust - Saturation adjustment (0 to 10)
- * @param {number} brightAdjust - Brightness adjustment (0 to 10) - scales RGB values
+ * @param {number} brightAdjust - (unused) Brightness adjustment (0 to 10)
  * @returns {import("./ExColor.js").ColorArray}
  */
 function makeBetterContrast(rgb, satAdjust = 0, brightAdjust = 0) {
@@ -215,23 +218,8 @@ function makeBetterContrast(rgb, satAdjust = 0, brightAdjust = 0) {
     // Saturation: increase only (clamped 0-1), multiplied by 4 for stronger effect (0-40% range)
     nSat = Math.max(0, Math.min(1, nSat + ((satAdjust * 4) / 100)));
 
-    // Convert back to RGB with saturation adjustment
-    let adjustedRgb = ExColor.hsl2rgb([nHue, nSat, nLum, a]);
-    
-    // Apply brightness by scaling RGB values (multiplicative brightening)
-    // This maintains color vibrancy unlike increasing HSL lightness which washes out colors
-    if (brightAdjust > 0) {
-        // Scale factor: 1.0 to 2.0 (0 = no change, 10 = 2x brighter)
-        const brightScale = 1 + (brightAdjust / 10);
-        adjustedRgb = [
-            Math.min(255, adjustedRgb[0] * brightScale),
-            Math.min(255, adjustedRgb[1] * brightScale),
-            Math.min(255, adjustedRgb[2] * brightScale),
-            adjustedRgb[3] // preserve alpha
-        ];
-    }
-
-    return adjustedRgb;
+    // Convert back to RGB with saturation & contrast adjustments
+    return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
 }
 
 const MAX_CACHE_SIZE = 100; // Prevent memory issues with many characters
@@ -508,8 +496,8 @@ function initializeSettingsUI() {
     // Color italic text checkbox
     const charColorItalicCheckbox = createCheckboxWithLabel(
         "sdc-char_color_italic",
-        "Color italic text (markdown *asterisks*)",
-        "When enabled, italic text will be colored with a mix of character color and grey.",
+           "Color italic text",
+        "When enabled, italic text (e.g. markdown *asterisks*) will be colored with a mix of character color and grey.",
         extSettings.charColorSettings.colorItalicText || false,
         (checked) => {
             extSettings.charColorSettings.colorItalicText = checked;
@@ -552,20 +540,6 @@ function initializeSettingsUI() {
         }
     );
     charAdjustmentsGroup.appendChild(charSaturationSlider);
-
-    const charLightnessSlider = createSliderWithLabel(
-        "sdc-char_lightness_adjustment",
-        "Brightness Boost",
-        "Brighten colors while maintaining vibrancy (multiplies RGB values). Range: 0-10",
-        0, 10, 1,
-        extSettings.charColorSettings.lightnessAdjustment || 0,
-        (value) => {
-            extSettings.charColorSettings.lightnessAdjustment = value;
-            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
-            onCharacterSettingsUpdated();
-        }
-    );
-    charAdjustmentsGroup.appendChild(charLightnessSlider);
 
     // Initialize values
     $(charColorSourceDropdown.querySelector('select'))
@@ -612,8 +586,8 @@ function initializeSettingsUI() {
     // Color italic text checkbox
     const personaColorItalicCheckbox = createCheckboxWithLabel(
         "sdc-persona_color_italic",
-        "Color italic text (markdown *asterisks*)",
-        "When enabled, italic text will be colored with a mix of persona color and grey.",
+        "Color italic text",
+        "When enabled, italic text (e.g. markdown *asterisks*) will be colored with a mix of persona color and grey.",
         extSettings.personaColorSettings.colorItalicText || false,
         (checked) => {
             extSettings.personaColorSettings.colorItalicText = checked;
@@ -656,20 +630,6 @@ function initializeSettingsUI() {
         }
     );
     personaAdjustmentsGroup.appendChild(personaSaturationSlider);
-
-    const personaLightnessSlider = createSliderWithLabel(
-        "sdc-persona_lightness_adjustment",
-        "Brightness Boost",
-        "Brighten colors while maintaining vibrancy (multiplies RGB values). Range: 0-10",
-        0, 10, 1,
-        extSettings.personaColorSettings.lightnessAdjustment || 0,
-        (value) => {
-            extSettings.personaColorSettings.lightnessAdjustment = value;
-            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaAdjustmentsGroup.appendChild(personaLightnessSlider);
 
     // Initialize values
     $(personaColorSourceDropdown.querySelector('select'))
@@ -900,8 +860,14 @@ jQuery(async ($) => {
     initializeSettingsUI();
     initializeCharSpecificUI();
 
-    // Add extension menu button for quick access to settings
-    addExtensionMenuButton();
+    // Wire up extension menu button so it is created when the Extensions menu is opened
+    const extensionsButton = document.getElementById("extensionsButton");
+    if (extensionsButton) {
+        extensionsButton.addEventListener("click", () => {
+            // Run after the menu has been rendered
+            setTimeout(() => addExtensionMenuButton(), 0);
+        });
+    }
 
     eventSource.on(event_types.CHAT_CHANGED, () => updateCharactersStyleSheet());
     expEventSource.on(exp_event_type.MESSAGE_ADDED, addAuthorUidClassToMessage);
