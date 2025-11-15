@@ -67,85 +67,105 @@ const extSettings = initializeSettings(extName, defaultExtSettings);
 
 /** @type {HTMLElement?} */
 let popoutElement = null;
+let popoutVisible = false;
 
-function createSettingsPopout(settingsHtml) {
-    if (popoutElement) {
-        return;
-    }
+/**
+ * Creates hidden drawer in Extensions panel (Moonlit Echoes pattern)
+ */
+function createHiddenSettingsDrawer(container, settingsHtml) {
+    if (!container) return;
+    if (document.getElementById('sdc-settings-drawer')) return;
 
+    const drawer = document.createElement('div');
+    drawer.id = 'sdc-settings-drawer';
+    drawer.className = 'inline-drawer';
+    drawer.style.display = 'none'; // Always hidden
+
+    drawer.innerHTML = `<div class="inline-drawer-content open">${settingsHtml}</div>`;
+    container.appendChild(drawer);
+}
+
+/**
+ * Opens popout by moving drawer content into floating window
+ */
+function openSettingsPopout() {
+    if (popoutVisible) return;
+
+    const drawer = document.getElementById('sdc-settings-drawer');
+    if (!drawer) return;
+
+    const drawerContent = drawer.querySelector('.inline-drawer-content');
+    if (!drawerContent) return;
+
+    // Create popout
     popoutElement = document.createElement('div');
-    popoutElement.id = 'sdc-settings-popout';
+    popoutElement.id = 'sdc_popout';
+    popoutElement.className = 'draggable';
+    popoutElement.style.display = 'none';
     popoutElement.innerHTML = `
-        <div class="sdc-popout-panel">
-            <div class="sdc-popout-header">
-                <h3>Smart Dialogue Colorizer</h3>
-                <button type="button" class="sdc-popout-close" aria-label="Close">
-                    <span class="fa-solid fa-xmark"></span>
-                </button>
-            </div>
-            <div class="sdc-popout-body"></div>
+        <div class="panelControlBar flex-container">
+            <div class="fa-solid fa-palette" style="margin-right: 10px;"></div>
+            <div class="title">Smart Dialogue Colorizer</div>
+            <div class="flex1"></div>
+            <div class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
         </div>
+        <div id="sdc_popout_content"></div>
     `;
 
-    document.body.appendChild(popoutElement);
+    // Append to movingDivs
+    const movingDivs = document.getElementById('movingDivs');
+    if (movingDivs) {
+        movingDivs.appendChild(popoutElement);
+    } else {
+        document.body.appendChild(popoutElement);
+    }
 
-    const popoutBody = popoutElement.querySelector('.sdc-popout-body');
-    popoutBody.innerHTML = settingsHtml;
+    // Move content
+    const contentContainer = popoutElement.querySelector('#sdc_popout_content');
+    drawerContent.style.display = '';
+    contentContainer.appendChild(drawerContent);
 
-    const closeButton = popoutElement.querySelector('.sdc-popout-close');
-    closeButton.addEventListener('click', () => toggleSettingsPopout(false));
+    // Close handler
+    popoutElement.querySelector('.dragClose').addEventListener('click', closeSettingsPopout);
 
-    popoutElement.addEventListener('click', (event) => {
-        if (event.target === popoutElement) {
-            toggleSettingsPopout(false);
-        }
+    $(popoutElement).fadeIn(250);
+    popoutVisible = true;
+
+    $(document).on('keydown.sdc_popout', (event) => {
+        if (event.key === 'Escape') closeSettingsPopout();
     });
 }
 
-function toggleSettingsPopout(open = true) {
-    if (!popoutElement) {
-        console.warn('[SDC] Settings popout not initialized yet.');
-        return;
-    }
+/**
+ * Closes popout and returns content to drawer
+ */
+function closeSettingsPopout() {
+    if (!popoutVisible || !popoutElement) return;
 
-    if (open) {
-        popoutElement.classList.add('sdc-popout-open');
-        const firstInput = popoutElement.querySelector('input, select, button, textarea');
-        if (firstInput) {
-            firstInput.focus({ preventScroll: true });
+    const drawerContent = popoutElement.querySelector('.inline-drawer-content');
+    const drawer = document.getElementById('sdc-settings-drawer');
+
+    $(popoutElement).fadeOut(250, () => {
+        if (drawerContent && drawer) {
+            drawer.appendChild(drawerContent);
         }
-    } else {
-        popoutElement.classList.remove('sdc-popout-open');
-    }
+        if (popoutElement) popoutElement.remove();
+        popoutElement = null;
+    });
+
+    popoutVisible = false;
+    $(document).off('keydown.sdc_popout');
 }
 
-function insertSettingsPanelStub(container) {
-    if (!container) {
-        return;
+/**
+ * Toggle popout open/closed
+ */
+function toggleSettingsPopout() {
+    if (popoutVisible) {
+        closeSettingsPopout();
+    } else {
+        openSettingsPopout();
     }
-
-    if (container.querySelector('#sdc-settings-stub')) {
-        return;
-    }
-
-    const stub = document.createElement('div');
-    stub.id = 'sdc-settings-stub';
-    stub.className = 'sdc-extension_block dc-flex-container';
-    stub.innerHTML = `
-        <p>
-            Smart Dialogue Colorizer now uses a dedicated pop-out for its settings.
-            You can open it from the Extensions dropdown menu, or by clicking the button below.
-        </p>
-        <button class="menu_button menu_button_small sdc-open-settings-button" type="button">
-            <span class="fa-solid fa-palette"></span>
-            <span>Open Settings</span>
-        </button>
-    `;
-
-    const openButton = stub.querySelector('button');
-    openButton.addEventListener('click', () => toggleSettingsPopout(true));
-
-    container.appendChild(stub);
 }
 
 function debounce(fn, delay = 100) {
@@ -748,7 +768,7 @@ function addExtensionMenuButton() {
     $button.appendTo($extensionsMenu);
 
     $button.on('click', () => {
-        toggleSettingsPopout(true);
+        toggleSettingsPopout();
     });
 }
 
@@ -882,10 +902,9 @@ function initializeCharSpecificUI() {
 jQuery(async ($) => {
     const settingsHtml = await $.get(`${extFolderPath}/dialogue-colorizer.html`);
 
-    createSettingsPopout(settingsHtml);
-
+    // Create hidden drawer (Moonlit Echoes pattern)
     const elemStExtensionSettings2 = document.getElementById("extensions_settings2");
-    insertSettingsPanelStub(elemStExtensionSettings2);
+    createHiddenSettingsDrawer(elemStExtensionSettings2, settingsHtml);
 
     initializeStyleSheets();
     initializeSettingsUI();
