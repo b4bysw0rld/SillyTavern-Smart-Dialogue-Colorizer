@@ -189,15 +189,15 @@
 /* Pop-out Window Styles */
 #sdc_popout {
     position: fixed;
-    top: 10%;
-    left: 50%;
-    transform: translateX(-50%);
+    top: var(--topBarBlockSize);
+    left: 0;
     width: min(700px, 90vw);
-    max-height: 80vh;
+    max-height: calc(100vh - var(--topBarBlockSize));
     background: var(--black70a, rgba(0, 0, 0, 0.9));
-    border: 1px solid var(--SmartThemeBorderColor, #444);
-    border-radius: 8px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    border: none;
+    border-right: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 0;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
     z-index: 9999;
     display: flex;
     flex-direction: column;
@@ -236,7 +236,8 @@
     padding: 16px;
     overflow-y: auto;
     overflow-x: hidden;
-    max-height: calc(80vh - 60px);
+    max-height: calc(100vh - var(--topBarBlockSize) - 60px);
+    flex: 1;
 }
 
 #sdc_popout_content .inline-drawer {
