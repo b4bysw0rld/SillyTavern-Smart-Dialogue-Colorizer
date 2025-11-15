@@ -70,6 +70,43 @@ let popoutElement = null;
 let popoutVisible = false;
 
 /**
+ * Creates a visible stub in Extensions panel with button to open pop-out
+ */
+function createExtensionStub(container) {
+    if (!container) return;
+    if (document.getElementById('sdc-extension-stub')) return;
+
+    const stub = document.createElement('div');
+    stub.id = 'sdc-extension-stub';
+    stub.innerHTML = `
+        <div class="inline-drawer">
+            <div class="inline-drawer-toggle inline-drawer-header">
+                <b>Smart Dialogue Colorizer</b>
+                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+            </div>
+            <div class="inline-drawer-content">
+                <div style="padding: 10px;">
+                    <button id="sdc-open-popout-btn" class="menu_button" style="width: 100%;">
+                        <i class="fa-solid fa-palette"></i>
+                        <span style="margin-left: 8px;">Open Settings in Pop-out</span>
+                    </button>
+                    <div style="margin-top: 10px; font-size: 0.9em; opacity: 0.7; text-align: center;">
+                        Click to open the settings panel, or use the Extensions menu.
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    container.appendChild(stub);
+
+    // Wire up button
+    const openBtn = stub.querySelector('#sdc-open-popout-btn');
+    if (openBtn) {
+        openBtn.addEventListener('click', toggleSettingsPopout);
+    }
+}
+
+/**
  * Creates hidden drawer in Extensions panel (Moonlit Echoes pattern)
  */
 function createHiddenSettingsDrawer(container, settingsHtml) {
@@ -902,8 +939,12 @@ function initializeCharSpecificUI() {
 jQuery(async ($) => {
     const settingsHtml = await $.get(`${extFolderPath}/dialogue-colorizer.html`);
 
-    // Create hidden drawer (Moonlit Echoes pattern)
     const elemStExtensionSettings2 = document.getElementById("extensions_settings2");
+    
+    // Create visible stub in Extensions panel with button to open pop-out
+    createExtensionStub(elemStExtensionSettings2);
+    
+    // Create hidden drawer for actual settings (Moonlit Echoes pattern)
     createHiddenSettingsDrawer(elemStExtensionSettings2, settingsHtml);
 
     initializeStyleSheets();
