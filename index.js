@@ -10,7 +10,7 @@ import { extension_settings } from "../../../extensions.js";
 import { ExColor } from "./ExColor.js";
 import { CharacterType, STCharacter } from "./STCharacter.js";
 import { getSmartAvatarColor } from "./color-utils.js";
-import { createColorSourceDropdown, createColorTextPickerCombo, createSliderWithLabel, createCheckboxWithLabel } from "./element-creators.js";
+import { createColorSourceDropdown, createColorTextPickerCombo, createCheckboxWithLabel } from "./element-creators.js";
 import { initializeSettings } from "./settings-utils.js";
 import { 
     expEventSource, 
@@ -51,8 +51,7 @@ const defaultCharColorSettings = {
     staticColor: DEFAULT_STATIC_DIALOGUE_COLOR_HEX,
     colorOverrides: {},
     colorNameText: false,
-    saturationAdjustment: 0,
-    lightnessAdjustment: 0,
+    boostVibrancy: false,
 };
 const defaultExtSettings = {
     charColorSettings: defaultCharColorSettings,
@@ -170,14 +169,13 @@ function getSettingsForChar(charType) {
 /**
  * Improves color contrast for better readability on dark backgrounds.
  * Ensures adequate saturation and luminance while preserving hue.
- * Applies global color adjustments.
+ * Optionally boosts vibrancy.
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
- * @param {number} satAdjust - Saturation adjustment (0 to 10)
- * @param {number} lumAdjust - Brightness adjustment (0 to 10)
+ * @param {boolean} boostVibrancy - Whether to apply 20% saturation boost
  * @returns {import("./ExColor.js").ColorArray}
  */
-function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
+function makeBetterContrast(rgb, boostVibrancy = false) {
     const [h, s, l, a] = ExColor.rgb2hsl(rgb);
 
     let nHue = h;
@@ -198,12 +196,10 @@ function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
         nLum = 0.8; // Tone down very bright colors
     }
 
-    // Apply global adjustments (0-10 scale)
-    // Saturation: increase only (clamped 0-1), multiplied by 4 for stronger effect (0-40% range)
-    nSat = Math.max(0, Math.min(1, nSat + ((satAdjust * 4) / 100)));
-    
-    // Brightness: increase only (clamped 0-1)
-    nLum = Math.max(0, Math.min(1, nLum + (lumAdjust / 100)));
+    // Apply optional vibrancy boost (20% saturation increase)
+    if (boostVibrancy) {
+        nSat = Math.max(0, Math.min(1, nSat + 0.20));
+    }
 
     return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
 }
@@ -267,7 +263,7 @@ function clearCacheForCharType(charType) {
  * @param {STCharacter} stChar
  */
 function clearCacheForCharacter(stChar) {
-    const prefix = `${stChar.uid}_`;
+    const prefix = `${stChar.type}|${stChar.uid}|`;
     Object.keys(avatarColorCache).forEach(key => {
         if (key.startsWith(prefix)) {
             removeCacheEntry(key);
@@ -289,8 +285,8 @@ async function getCharacterDialogueColor(stChar) {
 
     switch (colorizeSource) {
         case ColorizeSourceType.AVATAR_SMART: {
-            // Create cache key that includes adjustment values
-            const cacheKey = `${stChar.uid}_${colorSettings.saturationAdjustment}_${colorSettings.lightnessAdjustment}`;
+            // Create cache key that includes character type and vibrancy boost setting
+            const cacheKey = `${stChar.type}|${stChar.uid}|${colorSettings.boostVibrancy ? 'boosted' : 'normal'}`;
             
             // Check cache first
             if (avatarColorCache[cacheKey]) {
@@ -301,11 +297,7 @@ async function getCharacterDialogueColor(stChar) {
                 const avatar = stChar.getAvatarImageThumbnail();
                 const colorRgb = await getSmartAvatarColor(avatar);
                 const betterContrastRgb = colorRgb 
-                    ? makeBetterContrast(
-                        colorRgb, 
-                        colorSettings.saturationAdjustment || 0,
-                        colorSettings.lightnessAdjustment || 0
-                      )
+                    ? makeBetterContrast(colorRgb, colorSettings.boostVibrancy || false)
                     : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
                 const exColor = ExColor.fromRgb(betterContrastRgb);
                 
@@ -447,11 +439,16 @@ function initializeSettingsUI() {
 
     // ===== CHARACTER SETTINGS =====
     const charDialogueSettings = elemExtensionSettings.querySelector("#sdc-char_dialogue_settings");
+    const charStaticColorRow = charDialogueSettings.children[1]; // The static color label/container
     
     // Color source dropdown
     const charColorSourceDropdown = createColorSourceDropdown("sdc-char_colorize_source", (changedEvent) => {
         const value = $(changedEvent.target).prop("value");
         extSettings.charColorSettings.colorizeSource = value;
+        
+        // Show/hide static color picker based on selection
+        charStaticColorRow.style.display = value === ColorizeSourceType.STATIC_COLOR ? 'block' : 'none';
+        
         onCharacterSettingsUpdated();
     });
     charDialogueSettings.children[0].insertAdjacentElement("afterend", charColorSourceDropdown);
@@ -479,38 +476,22 @@ function initializeSettingsUI() {
     );
     charDialogueSettings.children[2].insertAdjacentElement("afterend", charColorNameCheckbox);
 
-    // Adjustment sliders
-    const charAdjustmentsGroup = charDialogueSettings.querySelector(".dc-adjustments-group");
-
-    const charSaturationSlider = createSliderWithLabel(
-        "sdc-char_saturation_adjustment",
-        "Saturation Boost",
-        "Increase color vibrancy. Range: 0-10",
-        0, 10, 1,
-        extSettings.charColorSettings.saturationAdjustment || 0,
-        (value) => {
-            extSettings.charColorSettings.saturationAdjustment = value;
-            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
+    // Vibrancy boost checkbox (insert after color name checkbox to maintain correct order)
+    const charVibrancyCheckbox = createCheckboxWithLabel(
+        "sdc-char_boost_vibrancy",
+        "Boost color vibrancy",
+        "Increases saturation by 20% for more colorful dialogue (Avatar Smart mode only).",
+        extSettings.charColorSettings.boostVibrancy || false,
+        (checked) => {
+            extSettings.charColorSettings.boostVibrancy = checked;
+            clearCacheForCharType(CharacterType.CHARACTER); // Clear character cache
             onCharacterSettingsUpdated();
         }
     );
-    charAdjustmentsGroup.appendChild(charSaturationSlider);
+    charColorNameCheckbox.insertAdjacentElement("afterend", charVibrancyCheckbox);
 
-    const charLightnessSlider = createSliderWithLabel(
-        "sdc-char_lightness_adjustment",
-        "Brightness Boost",
-        "Make colors brighter. Range: 0-10",
-        0, 10, 1,
-        extSettings.charColorSettings.lightnessAdjustment || 0,
-        (value) => {
-            extSettings.charColorSettings.lightnessAdjustment = value;
-            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
-            onCharacterSettingsUpdated();
-        }
-    );
-    charAdjustmentsGroup.appendChild(charLightnessSlider);
-
-    // Initialize values
+    // Initialize values and visibility
+    charStaticColorRow.style.display = extSettings.charColorSettings.colorizeSource === ColorizeSourceType.STATIC_COLOR ? 'block' : 'none';
     $(charColorSourceDropdown.querySelector('select'))
         .prop("value", extSettings.charColorSettings.colorizeSource)
         .trigger('change');
@@ -520,11 +501,16 @@ function initializeSettingsUI() {
 
     // ===== PERSONA SETTINGS =====
     const personaDialogueSettings = elemExtensionSettings.querySelector("#sdc-persona_dialogue_settings");
+    const personaStaticColorRow = personaDialogueSettings.children[1]; // The static color label/container
     
     // Color source dropdown
     const personaColorSourceDropdown = createColorSourceDropdown("sdc-persona_colorize_source", (changedEvent) => {
         const value = $(changedEvent.target).prop("value");
         extSettings.personaColorSettings.colorizeSource = value;
+        
+        // Show/hide static color picker based on selection
+        personaStaticColorRow.style.display = value === ColorizeSourceType.STATIC_COLOR ? 'block' : 'none';
+        
         onPersonaSettingsUpdated();
     });
     personaDialogueSettings.children[0].insertAdjacentElement("afterend", personaColorSourceDropdown);
@@ -552,38 +538,22 @@ function initializeSettingsUI() {
     );
     personaDialogueSettings.children[2].insertAdjacentElement("afterend", personaColorNameCheckbox);
 
-    // Adjustment sliders
-    const personaAdjustmentsGroup = personaDialogueSettings.querySelector(".dc-adjustments-group");
-
-    const personaSaturationSlider = createSliderWithLabel(
-        "sdc-persona_saturation_adjustment",
-        "Saturation Boost",
-        "Increase color vibrancy. Range: 0-10",
-        0, 10, 1,
-        extSettings.personaColorSettings.saturationAdjustment || 0,
-        (value) => {
-            extSettings.personaColorSettings.saturationAdjustment = value;
-            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
+    // Vibrancy boost checkbox (insert after color name checkbox to maintain correct order)
+    const personaVibrancyCheckbox = createCheckboxWithLabel(
+        "sdc-persona_boost_vibrancy",
+        "Boost color vibrancy",
+        "Increases saturation by 20% for more colorful dialogue (Avatar Smart mode only).",
+        extSettings.personaColorSettings.boostVibrancy || false,
+        (checked) => {
+            extSettings.personaColorSettings.boostVibrancy = checked;
+            clearCacheForCharType(CharacterType.PERSONA); // Clear persona cache
             onPersonaSettingsUpdated();
         }
     );
-    personaAdjustmentsGroup.appendChild(personaSaturationSlider);
+    personaColorNameCheckbox.insertAdjacentElement("afterend", personaVibrancyCheckbox);
 
-    const personaLightnessSlider = createSliderWithLabel(
-        "sdc-persona_lightness_adjustment",
-        "Brightness Boost",
-        "Make colors brighter. Range: 0-10",
-        0, 10, 1,
-        extSettings.personaColorSettings.lightnessAdjustment || 0,
-        (value) => {
-            extSettings.personaColorSettings.lightnessAdjustment = value;
-            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaAdjustmentsGroup.appendChild(personaLightnessSlider);
-
-    // Initialize values
+    // Initialize values and visibility
+    personaStaticColorRow.style.display = extSettings.personaColorSettings.colorizeSource === ColorizeSourceType.STATIC_COLOR ? 'block' : 'none';
     $(personaColorSourceDropdown.querySelector('select'))
         .prop("value", extSettings.personaColorSettings.colorizeSource)
         .trigger('change');

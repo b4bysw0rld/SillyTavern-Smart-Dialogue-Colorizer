@@ -103,11 +103,18 @@ function createDownscaledCanvas(image, maxDimension = 1024) {
  * @param {HTMLImageElement | HTMLCanvasElement} image The image or canvas to analyze.
  * @param {number} paletteSize The number of colors to extract.
  * @returns {Object.<string, Object>} A dictionary of classified swatches.
+ * @throws {Error} If Color Thief fails to extract a palette from the image
  */
 function getColorThiefSwatches(image, paletteSize = 12) {
     const colorThief = new ColorThief();
     // Extract a larger palette of colors
     const palette = colorThief.getPalette(image, paletteSize);
+    
+    // Validate that Color Thief returned a valid palette array
+    // getPalette() can return null or false on failure
+    if (!palette || !Array.isArray(palette) || palette.length === 0) {
+        throw new Error('[SDC] Color Thief failed to extract palette from image');
+    }
     
     const classifiedSwatches = {};
     const usedCategories = new Set();
