@@ -6,6 +6,7 @@ import { waitForImage } from "./utils.js";
 export const Vibrant = window["Vibrant"];
 const ColorThief = window["ColorThief"];
 const swatchCache = new Map();
+const pendingSwatches = new Map();
 
 /**
  * RGB to HSL conversion for color classification.
@@ -68,7 +69,7 @@ function classifyColor(r, g, b) {
  * @param {number} maxDimension The maximum width or height of the scaled-down canvas.
  * @returns {HTMLCanvasElement} A canvas element containing the downscaled image.
  */
-function createDownscaledCanvas(image, maxDimension = 256) {
+function createDownscaledCanvas(image, maxDimension = 1024) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -94,6 +95,15 @@ function createDownscaledCanvas(image, maxDimension = 256) {
 
     // Draw the image onto the canvas, which performs the resizing
     ctx.drawImage(image, 0, 0, width, height);
+
+    // Patch for ColorThief compatibility:
+    // ColorThief expects 'naturalWidth' and 'naturalHeight' properties which exist on Images but not Canvases.
+    // We add them manually so ColorThief can process this downscaled canvas without error.
+    // @ts-ignore
+    canvas.naturalWidth = canvas.width;
+    // @ts-ignore
+    canvas.naturalHeight = canvas.height;
+
     return canvas;
 }
 
@@ -150,57 +160,74 @@ function getColorThiefSwatches(image, paletteSize = 12) {
 async function getSwatchesFromImage(image) {
     await waitForImage(image);
     const cacheKey = image.src;
+    
+    // Check result cache
     if (swatchCache.has(cacheKey)) return swatchCache.get(cacheKey);
 
-    const imageSourceForAnalysis = createDownscaledCanvas(image);
+    // Check pending requests to avoid duplicate work
+    if (pendingSwatches.has(cacheKey)) {
+        return pendingSwatches.get(cacheKey);
+    }
 
-    // Get the initial results from Vibrant.js
-    const vibrant = new Vibrant(imageSourceForAnalysis, 96, 8);
-    let swatches = vibrant.swatches();
-    
-    // Define all the swatches we absolutely require
-    const requiredSwatches = [
-        'Vibrant', 'DarkVibrant', 'LightVibrant',
-        'Muted', 'DarkMuted', 'LightMuted'
-    ];
-
-    // Check if any of the required swatches are missing from the result
-    const isMissingSwatches = requiredSwatches.some(swatchName => !swatches[swatchName]);
-    
-    // If ANY swatch is missing, run the Color Thief fallback to fill the gaps
-    if (isMissingSwatches) {
+    const processPromise = (async () => {
         try {
-            // Get the classified swatches from Color Thief
-            const colorThiefSwatches = getColorThiefSwatches(imageSourceForAnalysis, 12);
-            
-            // Create a new merged swatch object. Start with Vibrant.js results.
-            const mergedSwatches = { ...swatches };
+            const imageSourceForAnalysis = createDownscaledCanvas(image);
 
-            // Intelligently fill in the blanks
-            for (const swatchName of requiredSwatches) {
-                // If the original swatches are missing this one,
-                if (!mergedSwatches[swatchName] && colorThiefSwatches[swatchName]) {
-                    mergedSwatches[swatchName] = colorThiefSwatches[swatchName];
+            // Get the initial results from Vibrant.js
+            const vibrant = new Vibrant(imageSourceForAnalysis, 96, 8);
+            let swatches = vibrant.swatches();
+            
+            // Define all the swatches we absolutely require
+            const requiredSwatches = [
+                'Vibrant', 'DarkVibrant', 'LightVibrant',
+                'Muted', 'DarkMuted', 'LightMuted'
+            ];
+
+            // Check if any of the required swatches are missing from the result
+            const isMissingSwatches = requiredSwatches.some(swatchName => !swatches[swatchName]);
+            
+            // If ANY swatch is missing, run the Color Thief fallback to fill the gaps
+            if (isMissingSwatches) {
+                try {
+                    // Get the classified swatches from Color Thief
+                    const colorThiefSwatches = getColorThiefSwatches(imageSourceForAnalysis, 12);
+                    
+                    // Create a new merged swatch object. Start with Vibrant.js results.
+                    const mergedSwatches = { ...swatches };
+
+                    // Intelligently fill in the blanks
+                    for (const swatchName of requiredSwatches) {
+                        // If the original swatches are missing this one,
+                        if (!mergedSwatches[swatchName] && colorThiefSwatches[swatchName]) {
+                            mergedSwatches[swatchName] = colorThiefSwatches[swatchName];
+                        }
+                    }
+                    
+                    // The final result is the merged object
+                    swatches = mergedSwatches;
+
+                } catch (err) {
+                    console.warn('[SDC] Color Thief fallback failed:', err);
                 }
             }
             
-            // The final result is the merged object
-            swatches = mergedSwatches;
+            swatchCache.set(cacheKey, swatches);
 
-        } catch (err) {
-            console.warn('[SDC] Color Thief fallback failed:', err);
+            // Limit cache size to prevent memory issues
+            if (swatchCache.size > 50) {
+                const oldestKey = swatchCache.keys().next().value;
+                swatchCache.delete(oldestKey);
+            }
+            
+            return swatches;
+        } finally {
+            // Always clean up pending promise
+            pendingSwatches.delete(cacheKey);
         }
-    }
-    
-    swatchCache.set(cacheKey, swatches);
+    })();
 
-    // Limit cache size to prevent memory issues
-    if (swatchCache.size > 50) {
-        const oldestKey = swatchCache.keys().next().value;
-        swatchCache.delete(oldestKey);
-    }
-    
-    return swatches;
+    pendingSwatches.set(cacheKey, processPromise);
+    return processPromise;
 }
 
 /**

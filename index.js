@@ -94,9 +94,6 @@ async function getCharStyleString(stChar) {
             .mes[sdc-author_uid="${stChar.uid}"] {
                 --character-color: #${dialogueColor.toHex()};
             }
-            .mes[sdc-author_uid="${stChar.uid}"] .mes_text q {
-                color: var(--character-color);
-            }
         `;
         
         // Apply color to character name if enabled
@@ -225,9 +222,9 @@ function makeBetterContrast(rgb, boostVibrancy = false, isLight = false) {
         }
     }
 
-    // Apply optional vibrancy boost (20% saturation increase)
+    // Apply optional vibrancy boost (35% saturation increase)
     if (boostVibrancy) {
-        nSat = Math.max(0, Math.min(1, nSat + 0.20));
+        nSat = Math.max(0, Math.min(1, nSat + 0.35));
     }
 
     return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
@@ -510,7 +507,7 @@ function initializeSettingsUI() {
     const charVibrancyCheckbox = createCheckboxWithLabel(
         "sdc-char_boost_vibrancy",
         "Boost color vibrancy",
-        "Increases saturation by 20% for more colorful dialogue (Avatar Smart mode only).",
+        "Increases saturation by 35% for more colorful dialogue (Avatar Smart mode only).",
         extSettings.charColorSettings.boostVibrancy || false,
         (checked) => {
             extSettings.charColorSettings.boostVibrancy = checked;
@@ -572,7 +569,7 @@ function initializeSettingsUI() {
     const personaVibrancyCheckbox = createCheckboxWithLabel(
         "sdc-persona_boost_vibrancy",
         "Boost color vibrancy",
-        "Increases saturation by 20% for more colorful dialogue (Avatar Smart mode only).",
+        "Increases saturation by 35% for more colorful dialogue (Avatar Smart mode only).",
         extSettings.personaColorSettings.boostVibrancy || false,
         (checked) => {
             extSettings.personaColorSettings.boostVibrancy = checked;
@@ -830,11 +827,15 @@ jQuery(async ($) => {
     });
 
     // Watch for theme changes to update colors automatically
+    let lastThemeIsLight = isLightTheme();
     const themeObserver = new MutationObserver(debounce(() => {
-        // When body class or style changes, it might be a theme change
-        // We trigger a refresh of the stylesheets which will re-evaluate isLightTheme()
-        updateCharactersStyleSheet();
-        updatePersonasStyleSheet();
+        // Check if the theme actually changed to avoid unnecessary updates
+        const currentThemeIsLight = isLightTheme();
+        if (currentThemeIsLight !== lastThemeIsLight) {
+            lastThemeIsLight = currentThemeIsLight;
+            updateCharactersStyleSheet();
+            updatePersonasStyleSheet();
+        }
     }, 500));
     
     themeObserver.observe(document.body, { 

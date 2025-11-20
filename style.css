@@ -185,3 +185,10 @@
 .sdc-clear-btn i {
     font-size: 1.1em;
 }
+
+/* Static rule for dialogue coloring */
+/* Uses the variable if defined, otherwise inherits (default behavior) */
+.mes[sdc-author_uid] .mes_text q {
+    color: var(--character-color, inherit);
+    transition: color 0.2s ease;
+}
