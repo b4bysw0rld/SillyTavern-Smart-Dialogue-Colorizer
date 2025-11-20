@@ -68,7 +68,7 @@ function classifyColor(r, g, b) {
  * @param {number} maxDimension The maximum width or height of the scaled-down canvas.
  * @returns {HTMLCanvasElement} A canvas element containing the downscaled image.
  */
-function createDownscaledCanvas(image, maxDimension = 1024) {
+function createDownscaledCanvas(image, maxDimension = 256) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 

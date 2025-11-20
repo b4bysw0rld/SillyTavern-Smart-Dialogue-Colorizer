@@ -167,15 +167,30 @@ function getSettingsForChar(charType) {
 }
 
 /**
- * Improves color contrast for better readability on dark backgrounds.
+ * Determines if the current application theme is light or dark.
+ * Checks the computed background color of the body.
+ * @returns {boolean} True if light theme, false if dark theme.
+ */
+function isLightTheme() {
+    const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
+    if (!rgb) return false; // Default to dark if can't determine
+    
+    // Calculate relative luminance
+    const luminance = (0.299 * parseInt(rgb[0]) + 0.587 * parseInt(rgb[1]) + 0.114 * parseInt(rgb[2])) / 255;
+    return luminance > 0.5;
+}
+
+/**
+ * Improves color contrast for better readability on dark or light backgrounds.
  * Ensures adequate saturation and luminance while preserving hue.
  * Optionally boosts vibrancy.
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
  * @param {boolean} boostVibrancy - Whether to apply 20% saturation boost
+ * @param {boolean} isLight - Whether the current theme is light
  * @returns {import("./ExColor.js").ColorArray}
  */
-function makeBetterContrast(rgb, boostVibrancy = false) {
+function makeBetterContrast(rgb, boostVibrancy = false, isLight = false) {
     const [h, s, l, a] = ExColor.rgb2hsl(rgb);
 
     let nHue = h;
@@ -187,13 +202,27 @@ function makeBetterContrast(rgb, boostVibrancy = false) {
         nSat = Math.min(nSat + 0.3, 0.8);
     }
 
-    // Ensure luminance is in readable range (not too dark, not too bright)
-    if (nLum < 0.5) {
-        nLum = 0.65; // Brighten dark colors
-    } else if (nLum < 0.7) {
-        nLum = 0.7; // Slight boost for mid-range
-    } else if (nLum > 0.85) {
-        nLum = 0.8; // Tone down very bright colors
+    if (isLight) {
+        // Light Theme Logic: Darken colors that are too bright
+        if (nLum > 0.6) {
+            nLum = 0.45; // Darken bright colors
+        } else if (nLum > 0.4) {
+            nLum = 0.4; // Slight darken for mid-range
+        }
+        // Ensure it's not TOO dark though, or it looks like black text
+        if (nLum < 0.2) {
+            nLum = 0.25;
+        }
+    } else {
+        // Dark Theme Logic (Default)
+        // Ensure luminance is in readable range (not too dark, not too bright)
+        if (nLum < 0.5) {
+            nLum = 0.65; // Brighten dark colors
+        } else if (nLum < 0.7) {
+            nLum = 0.7; // Slight boost for mid-range
+        } else if (nLum > 0.85) {
+            nLum = 0.8; // Tone down very bright colors
+        }
     }
 
     // Apply optional vibrancy boost (20% saturation increase)
@@ -285,8 +314,9 @@ async function getCharacterDialogueColor(stChar) {
 
     switch (colorizeSource) {
         case ColorizeSourceType.AVATAR_SMART: {
-            // Create cache key that includes character type and vibrancy boost setting
-            const cacheKey = `${stChar.type}|${stChar.uid}|${colorSettings.boostVibrancy ? 'boosted' : 'normal'}`;
+            const isLight = isLightTheme();
+            // Create cache key that includes character type, vibrancy boost setting, and theme
+            const cacheKey = `${stChar.type}|${stChar.uid}|${colorSettings.boostVibrancy ? 'boosted' : 'normal'}|${isLight ? 'light' : 'dark'}`;
             
             // Check cache first
             if (avatarColorCache[cacheKey]) {
@@ -297,7 +327,7 @@ async function getCharacterDialogueColor(stChar) {
                 const avatar = stChar.getAvatarImageThumbnail();
                 const colorRgb = await getSmartAvatarColor(avatar);
                 const betterContrastRgb = colorRgb 
-                    ? makeBetterContrast(colorRgb, colorSettings.boostVibrancy || false)
+                    ? makeBetterContrast(colorRgb, colorSettings.boostVibrancy || false, isLight)
                     : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
                 const exColor = ExColor.fromRgb(betterContrastRgb);
                 
@@ -797,6 +827,19 @@ jQuery(async ($) => {
         addAuthorUidToExistingMessages();
         updateCharactersStyleSheet();
         updatePersonasStyleSheet();
+    });
+
+    // Watch for theme changes to update colors automatically
+    const themeObserver = new MutationObserver(debounce(() => {
+        // When body class or style changes, it might be a theme change
+        // We trigger a refresh of the stylesheets which will re-evaluate isLightTheme()
+        updateCharactersStyleSheet();
+        updatePersonasStyleSheet();
+    }, 500));
+    
+    themeObserver.observe(document.body, { 
+        attributes: true, 
+        attributeFilter: ['class', 'style'] 
     });
 })
 
