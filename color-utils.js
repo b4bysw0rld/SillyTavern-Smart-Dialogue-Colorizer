@@ -69,7 +69,7 @@ function classifyColor(r, g, b) {
  * @param {number} maxDimension The maximum width or height of the scaled-down canvas.
  * @returns {HTMLCanvasElement} A canvas element containing the downscaled image.
  */
-function createDownscaledCanvas(image, maxDimension = 1024) {
+function createDownscaledCanvas(image, maxDimension = 256) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -174,7 +174,8 @@ async function getSwatchesFromImage(image) {
             const imageSourceForAnalysis = createDownscaledCanvas(image);
 
             // Get the initial results from Vibrant.js
-            const vibrant = new Vibrant(imageSourceForAnalysis, 96, 8);
+            // quality=64 (faster), colorCount=12 (better palette variety)
+            const vibrant = new Vibrant(imageSourceForAnalysis, 64, 12);
             let swatches = vibrant.swatches();
             
             // Define all the swatches we absolutely require
@@ -254,8 +255,8 @@ function isColorQualityGood(rgb) {
     const min = Math.min(r, g, b) / 255;
     const saturation = max === 0 ? 0 : (max - min) / max;
     
-    // Reject if too desaturated (grayish)
-    if (saturation < 0.2) {
+    // Reject if too desaturated (grayish) - helps filter out skin tones
+    if (saturation < 0.25) {
         return false;
     }
     
