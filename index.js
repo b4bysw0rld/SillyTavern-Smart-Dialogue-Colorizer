@@ -473,10 +473,14 @@ function onAnySettingsUpdated() {
 function onCharacterChanged(char) {
   const colorOverride = document.getElementById("sdc-char_color_override");
   if (!colorOverride) return;
-  setInputColorPickerComboValue(
-    colorOverride,
-    extSettings.charColorSettings.colorOverrides[char.avatarName]
-  );
+  const newValue = extSettings.charColorSettings.colorOverrides[char.avatarName];
+  // Prefer the custom override UI setter if present; fall back to legacy input combo behavior.
+  const setter = /** @type {any} */ (colorOverride).__sdcSetColorOverrideValue;
+  if (typeof setter === "function") {
+    setter(newValue);
+    return;
+  }
+  setInputColorPickerComboValue(colorOverride, newValue);
 }
 
 /**
@@ -486,10 +490,15 @@ function onCharacterChanged(char) {
 function onPersonaChanged(persona) {
   const colorOverride = document.getElementById("sdc-persona_color_override");
   if (!colorOverride) return;
-  setInputColorPickerComboValue(
-    colorOverride,
-    extSettings.personaColorSettings.colorOverrides[persona.avatarName]
-  );
+  const newValue =
+    extSettings.personaColorSettings.colorOverrides[persona.avatarName];
+  // Prefer the custom override UI setter if present; fall back to legacy input combo behavior.
+  const setter = /** @type {any} */ (colorOverride).__sdcSetColorOverrideValue;
+  if (typeof setter === "function") {
+    setter(newValue);
+    return;
+  }
+  setInputColorPickerComboValue(colorOverride, newValue);
 }
 
 //#endregion Event Handlers
@@ -853,12 +862,23 @@ function initializeCharSpecificUI() {
         onCharacterSettingsUpdated();
       }
 
-      updateSwatchSelection(colorValue || "");
+      setUIOverrideValue(colorValue);
+    }
+
+    /**
+     * Updates ONLY the UI state (swatch selection, custom highlight, reset visibility, inputs).
+     * Does not update settings.
+     *
+     * @param {string?} colorValue
+     */
+    function setUIOverrideValue(colorValue) {
+      const value = colorValue ?? "";
+      updateSwatchSelection(value);
 
       // Update custom input to show the color
-      if (colorValue) {
-        textInput.value = colorValue;
-        colorInput.value = colorValue;
+      if (value) {
+        textInput.value = value;
+        colorInput.value = value;
       } else {
         textInput.value = "";
         colorInput.value = "#808080";
@@ -953,16 +973,16 @@ function initializeCharSpecificUI() {
     wrapper.appendChild(labelRow);
     wrapper.appendChild(controlRow);
 
+    // Expose a setter so the persona/character change handlers can refresh UI state
+    // when the selected persona/character changes.
+    /** @type {any} */ (wrapper).__sdcSetColorOverrideValue = setUIOverrideValue;
+
     // Initialize with current value
     setTimeout(() => {
       const stChar = stCharGetter();
       const colorSettings = getSettingsForChar(stChar);
       const savedColor = colorSettings.colorOverrides[stChar.avatarName] || "";
-      if (savedColor) {
-        textInput.value = savedColor;
-        colorInput.value = savedColor;
-      }
-      updateSwatchSelection(savedColor);
+      setUIOverrideValue(savedColor);
     }, 100);
 
     return wrapper;
