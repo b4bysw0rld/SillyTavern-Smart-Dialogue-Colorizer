@@ -488,18 +488,12 @@ function onCharacterChanged(char) {
  * @param {STCharacter} persona
  */
 function onPersonaChanged(persona) {
-  console.debug("[SDC] onPersonaChanged called for:", persona.avatarName);
   const colorOverride = document.getElementById("sdc-persona_color_override");
-  if (!colorOverride) {
-    console.debug("[SDC] Persona override element not found");
-    return;
-  }
+  if (!colorOverride) return;
   const newValue =
     extSettings.personaColorSettings.colorOverrides[persona.avatarName];
-  console.debug("[SDC] New value for persona:", newValue);
   // Prefer the custom override UI setter if present; fall back to legacy input combo behavior.
   const setter = /** @type {any} */ (colorOverride).__sdcSetColorOverrideValue;
-  console.debug("[SDC] Setter type:", typeof setter);
   if (typeof setter === "function") {
     setter(newValue);
     return;
@@ -878,7 +872,6 @@ function initializeCharSpecificUI() {
      * @param {string?} colorValue
      */
     function setUIOverrideValue(colorValue) {
-      console.debug("[SDC] setUIOverrideValue called with:", colorValue);
       const value = colorValue ?? "";
       updateSwatchSelection(value);
 
@@ -1130,9 +1123,7 @@ jQuery(async ($) => {
   // The avatar containers get a "selected" class when clicked
   const personaManagementObserver = new MutationObserver(
     debounce(() => {
-      const currentPersona = getCurrentPersona();
-      console.debug("[SDC] PersonaManagement observer triggered, current persona:", currentPersona.avatarName);
-      onPersonaChanged(currentPersona);
+      onPersonaChanged(getCurrentPersona());
     }, 100)
   );
 
@@ -1145,7 +1136,6 @@ jQuery(async ($) => {
         attributes: true,
         attributeFilter: ["class"],
       });
-      console.debug("[SDC] Now observing #PersonaManagement for persona changes");
       return true;
     }
     return false;
