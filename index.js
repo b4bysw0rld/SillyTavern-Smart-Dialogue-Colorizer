@@ -1126,6 +1126,41 @@ jQuery(async ($) => {
     updatePersonasStyleSheet();
   });
 
+  // Watch for persona changes in the Persona Management panel (#PersonaManagement)
+  // The avatar containers get a "selected" class when clicked
+  const personaManagementObserver = new MutationObserver(
+    debounce(() => {
+      const currentPersona = getCurrentPersona();
+      console.debug("[SDC] PersonaManagement observer triggered, current persona:", currentPersona.avatarName);
+      onPersonaChanged(currentPersona);
+    }, 100)
+  );
+
+  // Try to observe immediately, and also set up a watcher in case the panel is created later
+  function tryObservePersonaManagement() {
+    const personaManagement = document.getElementById("PersonaManagement");
+    if (personaManagement) {
+      personaManagementObserver.observe(personaManagement, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+      console.debug("[SDC] Now observing #PersonaManagement for persona changes");
+      return true;
+    }
+    return false;
+  }
+
+  if (!tryObservePersonaManagement()) {
+    // Panel doesn't exist yet, watch for it to be created
+    const panelWatcher = new MutationObserver(() => {
+      if (tryObservePersonaManagement()) {
+        panelWatcher.disconnect();
+      }
+    });
+    panelWatcher.observe(document.body, { childList: true, subtree: true });
+  }
+
   // Watch for theme changes to update colors automatically
   let lastThemeIsLight = isLightTheme();
   const themeObserver = new MutationObserver(
