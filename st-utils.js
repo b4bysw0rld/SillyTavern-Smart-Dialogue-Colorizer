@@ -82,6 +82,7 @@ function onPersonasChanged(mutationList, observer) {
             if (!stChar) {
                 continue;
             }
+            console.debug("[SDC] Emitting PERSONA_CHANGED for:", stChar.avatarName);
             expEventSource.emit(exp_event_type.PERSONA_CHANGED, stChar);
         }
         else if (mutation.type === "childList") {
