@@ -472,6 +472,7 @@ function onAnySettingsUpdated() {
  */
 function onCharacterChanged(char) {
   const colorOverride = document.getElementById("sdc-char_color_override");
+  if (!colorOverride) return;
   setInputColorPickerComboValue(
     colorOverride,
     extSettings.charColorSettings.colorOverrides[char.avatarName]
@@ -484,6 +485,7 @@ function onCharacterChanged(char) {
  */
 function onPersonaChanged(persona) {
   const colorOverride = document.getElementById("sdc-persona_color_override");
+  if (!colorOverride) return;
   setInputColorPickerComboValue(
     colorOverride,
     extSettings.personaColorSettings.colorOverrides[persona.avatarName]
@@ -752,28 +754,6 @@ function addExtensionMenuButton() {
 }
 
 function initializeCharSpecificUI() {
-  // Character
-  const elemCharColorOverride = createColorOverrideElem(
-    "sdc-char_color_override",
-    getCharacterBeingEdited
-  );
-
-  const elemCharCardForm = document.getElementById("form_create");
-  const elemAvatarNameBlock = elemCharCardForm.querySelector(
-    "div#avatar-and-name-block"
-  );
-  elemAvatarNameBlock.insertAdjacentElement("afterend", elemCharColorOverride);
-
-  // Persona
-  const elemPersonaColorOverride = createColorOverrideElem(
-    "sdc-persona_color_override",
-    getCurrentPersona
-  );
-
-  const elemPersonaDescription = document.getElementById("persona_description");
-  const elemDescParent = elemPersonaDescription.parentElement;
-  elemDescParent.insertAdjacentElement("afterbegin", elemPersonaColorOverride);
-
   /**
    * Preset colors for quick selection (readable on both light/dark themes)
    */
@@ -987,6 +967,92 @@ function initializeCharSpecificUI() {
 
     return wrapper;
   }
+
+  /**
+   * Attempts to insert the character override UI into the character editor.
+   * This UI target isn't always present (e.g. if user hasn't opened the editor yet).
+   * @returns {boolean} true if inserted or already present
+   */
+  function tryInsertCharacterOverride() {
+    if (document.getElementById("sdc-char_color_override")) return true;
+
+    const elemCharCardForm = document.getElementById("form_create");
+    if (!elemCharCardForm) return false;
+
+    const elemAvatarNameBlock = elemCharCardForm.querySelector(
+      "div#avatar-and-name-block"
+    );
+    if (!elemAvatarNameBlock) return false;
+
+    const elemCharColorOverride = createColorOverrideElem(
+      "sdc-char_color_override",
+      getCharacterBeingEdited
+    );
+    elemAvatarNameBlock.insertAdjacentElement("afterend", elemCharColorOverride);
+    return true;
+  }
+
+  /**
+   * Finds a good anchor element to insert the persona override UI.
+   * Tries known IDs first, then falls back to locating the "Current Persona" label.
+   * @returns {{anchor: Element, position: InsertPosition}?}
+   */
+  function findPersonaOverrideAnchor() {
+    const elemPersonaDescription = document.getElementById("persona_description");
+    if (elemPersonaDescription?.parentElement) {
+      return { anchor: elemPersonaDescription.parentElement, position: "afterbegin" };
+    }
+
+    // Fallback: find the label that contains "Current Persona" and insert before its row/container.
+    const labels = Array.from(document.querySelectorAll("label"));
+    const currentPersonaLabel = labels.find((l) =>
+      (l.textContent ?? "").trim().toLowerCase().includes("current persona")
+    );
+    if (!currentPersonaLabel) return null;
+
+    const row =
+      currentPersonaLabel.closest("div") ?? currentPersonaLabel.parentElement;
+    if (!row) return null;
+
+    return { anchor: row, position: "beforebegin" };
+  }
+
+  /**
+   * Attempts to insert the persona override UI into Persona Management settings.
+   * This panel may be created lazily, so we retry when DOM changes.
+   * @returns {boolean} true if inserted or already present
+   */
+  function tryInsertPersonaOverride() {
+    if (document.getElementById("sdc-persona_color_override")) return true;
+
+    const anchor = findPersonaOverrideAnchor();
+    if (!anchor) return false;
+
+    const elemPersonaColorOverride = createColorOverrideElem(
+      "sdc-persona_color_override",
+      getCurrentPersona
+    );
+    anchor.anchor.insertAdjacentElement(anchor.position, elemPersonaColorOverride);
+    return true;
+  }
+
+  function tryInsertAll() {
+    const charOk = tryInsertCharacterOverride();
+    const personaOk = tryInsertPersonaOverride();
+    return { charOk, personaOk };
+  }
+
+  // Initial attempt (might only succeed partially depending on which UI panels exist)
+  tryInsertAll();
+
+  // Watch for the Persona Management and/or Character Editor DOM being created.
+  const injectionObserver = new MutationObserver(
+    debounce(() => {
+      const { charOk, personaOk } = tryInsertAll();
+      if (charOk && personaOk) injectionObserver.disconnect();
+    }, 200)
+  );
+  injectionObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 jQuery(async ($) => {
